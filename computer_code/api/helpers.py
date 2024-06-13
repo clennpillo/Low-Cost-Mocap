@@ -9,7 +9,7 @@ import time
 import numpy as np
 import cv2 as cv
 from KalmanFilter import KalmanFilter
-from pseyepy import Camera
+#from pseyepy import Camera
 from Singleton import Singleton
 
 
@@ -21,9 +21,21 @@ class Cameras:
         f = open(filename)
         self.camera_params = json.load(f)
 
-        self.cameras = Camera(fps=90, resolution=Camera.RES_SMALL, gain=10, exposure=100)
-        self.num_cameras = len(self.cameras.exposure)
+        video_sources = [0,1]
+        self.cameras = [cv.VideoCapture(src) for src in video_sources]
+
+        #self.cameras = Camera(fps=90, resolution=Camera.RES_SMALL, gain=10, exposure=100)
+        self.num_cameras = len(self.cameras)
         print(self.num_cameras)
+
+        # Set basic params of cameras
+        for i in range(self.num_cameras):
+            cam = self.cameras[i]
+            cam.set(cv.CAP_PROP_FRAME_WIDTH, 320)
+            cam.set(cv.CAP_PROP_FRAME_HEIGHT, 240)
+            cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0)
+            cam.set(cv.CAP_PROP_EXPOSURE, 100)
+            cam.set(cv.CAP_PROP_GAIN, 0)
 
         self.is_capturing_points = False
 
@@ -62,11 +74,25 @@ class Cameras:
         self.drone_armed = [False for i in range(0, self.num_objects)]
     
     def edit_settings(self, exposure, gain):
-        self.cameras.exposure = [exposure] * self.num_cameras
-        self.cameras.gain = [gain] * self.num_cameras
+        self.exposure = [exposure] * self.num_cameras
+        self.gain = [gain] * self.num_cameras
+
+        # Set params of cameras
+        for i in range(self.num_cameras):
+            cam = self.cameras[i]
+            cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0)
+            cam.set(cv.CAP_PROP_EXPOSURE, exposure)
+            cam.set(cv.CAP_PROP_GAIN, gain)
 
     def _camera_read(self):
-        frames, _ = self.cameras.read()
+        #frames, _ = self.cameras.read()
+
+        # Read frames from all cameras
+        frames = []
+        for i in range(self.num_cameras):
+            cam = self.cameras[i]
+            ret, frame = cam.read()
+            frames.append(frame)
 
         for i in range(0, self.num_cameras):
             frames[i] = np.rot90(frames[i], k=self.camera_params[i]["rotation"])

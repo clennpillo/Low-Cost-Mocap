@@ -18,11 +18,20 @@ import json
 
 serialLock = threading.Lock()
 
-ser = serial.Serial("/dev/cu.usbserial-02X2K2GE", 1000000, write_timeout=1, )
+ser = serial.Serial("COM5", 1000000, write_timeout=1, )
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
-socketio = SocketIO(app, cors_allowed_origins='*')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+
+ser = None
+def serial_worker():
+    global ser
+    try:
+        with serialLock:
+            ser = serial.Serial("COM5", 1000000, write_timeout=1)
+    except Exception as e:
+        print(f"Serial exception: {e}")
 
 cameras_init = False
 
@@ -324,4 +333,8 @@ def live_mocap(data):
 
 
 if __name__ == '__main__':
-    socketio.run(app, port=3001, debug=True)
+    serial_thread = threading.Thread(target=serial_worker)
+    serial_thread.daemon = True 
+    serial_thread.start()
+
+    socketio.run(app, port=3001, debug=True, use_reloader=False)

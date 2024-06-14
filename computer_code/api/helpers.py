@@ -94,6 +94,7 @@ class Cameras:
             ret, frame = cam.read()
             frames.append(frame)
 
+        # Make basic convertions to frames
         for i in range(0, self.num_cameras):
             frames[i] = np.rot90(frames[i], k=self.camera_params[i]["rotation"])
             frames[i] = make_square(frames[i])
@@ -107,15 +108,28 @@ class Cameras:
             frames[i] = cv.filter2D(frames[i], -1, kernel)
             frames[i] = cv.cvtColor(frames[i], cv.COLOR_RGB2BGR)
 
+        # Display more elements in frames
+        # like captured points
+        # like triangulating lines
         if (self.is_capturing_points):
+            # image_points: (4,3,2) matrix
+            # [
+            #   [[100,101],[200,201],[300,301]], # camera1
+            #   [], # camera2
+            #   [], # camera3
+            #   []  # camera4
+            # ]
             image_points = []
             for i in range(0, self.num_cameras):
                 frames[i], single_camera_image_points = self._find_dot(frames[i])
                 image_points.append(single_camera_image_points)
             
+            # Check if there exists at least one dot from all cameras
             if (any(np.all(point[0] != [None,None]) for point in image_points)):
+                # Only display the captured points
                 if self.is_capturing_points and not self.is_triangulating_points:
                     self.socketio.emit("image-points", [x[0] for x in image_points])
+                # Not only display but draw triangulating lines
                 elif self.is_triangulating_points:
                     errors, object_points, frames = find_point_correspondance_and_object_points(image_points, self.camera_poses, frames)
 
@@ -173,7 +187,14 @@ class Cameras:
         contours,_ = cv.findContours(grey, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE)
         img = cv.drawContours(img, contours, -1, (0,255,0), 1)
 
+        # image_points in on frame from one camera: (3,2) matrix
+        # [
+        #   [100,101], # dot1
+        #   [200,201], # dot2
+        #   [300,301]  # dot3
+        # ]
         image_points = []
+        # Calculate center coordinates for every contour
         for contour in contours:
             moments = cv.moments(contour)
             if moments["m00"] != 0:

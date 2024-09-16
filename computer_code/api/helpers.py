@@ -11,7 +11,10 @@ import cv2 as cv
 from KalmanFilter import KalmanFilter
 #from pseyepy import Camera
 from Singleton import Singleton
-
+import queue
+import websocket
+import threading
+import base64
 
 @Singleton
 class Cameras:
@@ -21,21 +24,33 @@ class Cameras:
         f = open(filename)
         self.camera_params = json.load(f)
 
-        video_sources = [0,1]
-        self.cameras = [cv.VideoCapture(src) for src in video_sources]
+        #self.cameras = []
+
+        #video_sources = [0]
+
+        #for v in video_sources:
+        #    cap = cv.VideoCapture(v)
+        #    cap.set(cv.CAP_PROP_FRAME_WIDTH, 320)
+        #    cap.set(cv.CAP_PROP_FRAME_HEIGHT, 240)
+        #    cap.set(cv.CAP_PROP_AUTO_EXPOSURE, 0)
+        #    cap.set(cv.CAP_PROP_EXPOSURE, 100)
+        #    cap.set(cv.CAP_PROP_GAIN, 0)
+
+        #    print("----", v, " --- ", cap)
+        #    # get a frame
+        #    ret, frame = cap.read()
+
+        #    #ret, frame = cap[ID].read()
+        #    if ret == False:
+        #        print("??? + ", v)
+        #    else:
+        #        print(v, ret)
+        #        self.cameras.append(cap)
 
         #self.cameras = Camera(fps=90, resolution=Camera.RES_SMALL, gain=10, exposure=100)
-        self.num_cameras = len(self.cameras)
+        #self.num_cameras = len(self.cameras)
+        self.num_cameras = 4
         print(self.num_cameras)
-
-        # Set basic params of cameras
-        for i in range(self.num_cameras):
-            cam = self.cameras[i]
-            cam.set(cv.CAP_PROP_FRAME_WIDTH, 320)
-            cam.set(cv.CAP_PROP_FRAME_HEIGHT, 240)
-            cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0)
-            cam.set(cv.CAP_PROP_EXPOSURE, 100)
-            cam.set(cv.CAP_PROP_GAIN, 0)
 
         self.is_capturing_points = False
 
@@ -73,26 +88,30 @@ class Cameras:
         self.num_objects = num_objects
         self.drone_armed = [False for i in range(0, self.num_objects)]
     
-    def edit_settings(self, exposure, gain):
-        self.exposure = [exposure] * self.num_cameras
-        self.gain = [gain] * self.num_cameras
+    #def edit_settings(self, exposure, gain):
+    #    self.exposure = [exposure] * self.num_cameras
+    #    self.gain = [gain] * self.num_cameras
 
-        # Set params of cameras
-        for i in range(self.num_cameras):
-            cam = self.cameras[i]
-            cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0)
-            cam.set(cv.CAP_PROP_EXPOSURE, exposure)
-            cam.set(cv.CAP_PROP_GAIN, gain)
+    #    # Set params of cameras
+    #    for i in range(self.num_cameras):
+    #        cam = self.cameras[i]
+    #        cam.set(cv.CAP_PROP_AUTO_EXPOSURE, 0)
+    #        cam.set(cv.CAP_PROP_EXPOSURE, exposure)
+    #        cam.set(cv.CAP_PROP_GAIN, gain)
 
     def _camera_read(self):
         #frames, _ = self.cameras.read()
 
         # Read frames from all cameras
         frames = []
-        for i in range(self.num_cameras):
-            cam = self.cameras[i]
-            ret, frame = cam.read()
-            frames.append(frame)
+        #for i in range(self.num_cameras):
+        #    cam = self.cameras[i]
+        #    ret, frame = cam.read()
+        #    frames.append(frame)
+        for camera_id, frame_queue in frame_queues.items():
+            if not frame_queue.empty():
+                frame = frame_queue.get()
+                frames.append(frame)
 
         # Make basic convertions to frames
         for i in range(0, self.num_cameras):
@@ -173,6 +192,7 @@ class Cameras:
                     })
         
         return frames
+    
 
     def get_frames(self):
         frames = self._camera_read()
@@ -245,6 +265,41 @@ class Cameras:
         
         if distortion_coef is not None:
             self.camera_params[camera_num]["distortion_coef"] = distortion_coef
+
+
+frame_queues = {
+    "camera1": queue.Queue(), 
+    "camera2": queue.Queue(),
+    "camera3": queue.Queue(),
+    "camera4": queue.Queue()
+}
+
+def on_message(ws, message):
+    try:
+        camera_id, jpg_as_text = message.split(":", 1)
+        jpg_original = base64.b64decode(jpg_as_text)
+        jpg_as_np = np.frombuffer(jpg_original, dtype=np.uint8)
+        frame = cv.imdecode(jpg_as_np, cv.IMREAD_COLOR)
+        if camera_id in frame_queues:
+            frame_queues[camera_id].put(frame)
+    except Exception as e:
+        print(f"Error processing frame: {e}")
+
+def on_error(ws, error):
+    print(error)
+
+def on_close(ws, close_status_code, close_msg):
+    print("### closed ###")
+
+def on_open(ws):
+    print("Connection opened")
+
+ws = websocket.WebSocketApp("ws://localhost:8000/",
+                        on_message=on_message,
+                        on_error=on_error,
+                        on_close=on_close,
+                        on_open=on_open)
+threading.Thread(target=ws.run_forever).start()
 
 
 def calculate_reprojection_errors(image_points, object_points, camera_poses):

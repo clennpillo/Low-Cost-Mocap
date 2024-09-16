@@ -35,7 +35,7 @@ def serial_worker():
 
 cameras_init = False
 
-num_objects = 2
+num_objects = 1
 
 @app.route("/api/camera-stream")
 def camera_stream():

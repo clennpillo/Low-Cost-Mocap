@@ -10,11 +10,14 @@
 #define batVoltagePin 34
 #define MAX_VEL 100
 #define ROTOR_RADIUS 0.0225
-#define Z_GAIN 0.7
+#define Z_GAIN 0
 
 #define DRONE_INDEX 1
 
 #define EEPROM_SIZE 4
+
+int batch = 0;
+int test = 0;
 
 unsigned long lastPing;
 
@@ -240,6 +243,12 @@ void loop() {
   int zPWM = 992 + (Z_GAIN * zVelOutput * 811) + zTrim;
   int yawPWM = 992 + (yawPosOutput * 811) + yawTrim;
   double groundEffectMultiplier = 1 - groundEffectCoef*pow(((2*ROTOR_RADIUS) / (4*(zPos-groundEffectOffset))), 2);
+  
+  //Serial.printf("----%d", 2*ROTOR_RADIUS);
+  //Serial.printf("----%d", 4*(zPos-groundEffectOffset));
+  //Serial.printf("----%d", pow(((2*ROTOR_RADIUS) / (4*(zPos-groundEffectOffset))), 2));
+  //Serial.printf("----%d", groundEffectCoef*pow(((2*ROTOR_RADIUS) / (4*(zPos-groundEffectOffset))), 2));
+  
   zPWM *= max(0., groundEffectMultiplier);
   zPWM = armed && millis() - timeArmed > 100 ? zPWM : 172;
   data.ch[0] = -yPWM;
@@ -249,10 +258,29 @@ void loop() {
 
   if (micros() - lastSbusSend > 1e6 / sbusFrequency) {
     lastSbusSend = micros();
-    // Serial.printf("PWM x: %d, y: %d, z: %d, yaw: %d\nPos x: %f, y: %f, z: %f, yaw: %f\n", xPWM, yPWM, zPWM, yawPWM, xVel, yVel, zPos, yawPos);
-    // Serial.printf("Setpoint x: %f, y: %f, z: %f\n", xVelSetpoint, yVelSetpoint, zVelSetpoint);
-    // Serial.printf("Pos x: %f, y: %f, z: %f\n", xVel, yVel, zPos);
-    //Serial.printf("Output x: %f, y: %f, z: %f\n", xVelOutput, yVelOutput, zVelOutput);
+
+    if(test>2000)
+      test = 0;
+    
+    zPWM = test;
+      data.ch[2] = zPWM;
+
+    if(batch>60){
+      Serial.printf("------\n");
+      Serial.printf("----%f\n", 2*ROTOR_RADIUS);
+      Serial.printf("----%f\n", 4*(zPos-groundEffectOffset));
+      Serial.printf("----%f\n", pow(((2*ROTOR_RADIUS) / (4*(zPos-groundEffectOffset))), 2));
+      Serial.printf("----%f\n", groundEffectCoef*pow(((2*ROTOR_RADIUS) / (4*(zPos-groundEffectOffset))), 2));
+      Serial.printf("------\n");
+      Serial.printf("PWM x: %d, y: %d, z: %d, yaw: %d\nPos x: %f, y: %f, z: %f, yaw: %f\n", xPWM, yPWM, zPWM, yawPWM, xVel, yVel, zPos, yawPos);
+      Serial.printf("Setpoint x: %f, y: %f, z: %f\n", xVelSetpoint, yVelSetpoint, zVelSetpoint);
+      Serial.printf("Pos x: %f, y: %f, z: %f\n", xVel, yVel, zPos);
+      Serial.printf("Output x: %f, y: %f, z: %f\n", xVelOutput, yVelOutput, zVelOutput);
+
+      test += 100;
+      batch = 0;
+    }
+    batch++;
 
     sbus_tx.data(data);
     sbus_tx.Write();
